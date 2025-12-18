@@ -14,7 +14,7 @@ import os
 st.set_page_config(page_title="GCIP 2025 Jury Portal", layout="wide")
 DATA_FILE = "gcip_master_results.csv"
 
-# Orijinal Puan Rehberi
+# Orijinal Puan Rehberi (Excel Tanımları)
 SCORE_GUIDE = {
     5: "🌟 **5 - Keep doing what you’re doing.** Focus on other areas.",
     4: "✅ **4 - Almost there.** Could be better if [……]",
@@ -31,8 +31,29 @@ SESSIONS = {
     "4. Yenilenebilir Enerji+Enerji verimliliği Oturumu": {"date": "25.12.2025", "teams": ["Ion Membranes", "Strategic Innovative Initiatives", "Unda Mühendislik", "MTM Biyoteknoloji", "ComfyAtelier", "Solis Technology", "Sonicpdt", "PhElSyM", "HELIOSTEAM", "Nesea Bio", "Zamia Kompozit", "Posamas", "Chambio Kimya", "Ramer Consulting", "ZincirX", "VEGUS BİYOTEKNOLOJİ", "ENVİCULTURE TARIM"]}
 }
 
-PRES_CRITERIA = ["1. Business Description", "2. Customer Discovery", "3. Tech Validation", "4. Go-To-Market", "5. Finances", "6. Legal", "7. Team", "8. Sustainability", "9. Presentation Quality"]
-WORK_CRITERIA = ["1. Business Model Canvas", "2. Product/Market Fit", "3. Markets", "4. Tech Validation", "5. Finances", "6. Legal", "7. Team", "8. Sustainability"]
+# Excel'den Gelen Orijinal Başlıklar (Topic Names)
+PRES_CRITERIA = [
+    "1. Business Description", 
+    "2. Customer Discovery", 
+    "3. Product/Technology Validation", 
+    "4. Go-To-Market Tactics / Sales Model", 
+    "5. Finances and Funding", 
+    "6. Legal", 
+    "7. Team", 
+    "8. Sustainability", 
+    "9. Presentation Quality"
+]
+
+WORK_CRITERIA = [
+    "1. Business Model Canvas (İş Modeli Kanvası)", 
+    "2. Product/Market Fit (Ürün/Pazar Uyumu)", 
+    "3. Markets and Getting To Them (Pazar ve Pazarlara Ulaşım)", 
+    "4. Product/Technology Validation (Ürün/Teknoloji Doğrulama)", 
+    "5. Finances and Funding (Finans ve Fonlama)", 
+    "6. Legal (Yasal Hususlar)", 
+    "7. Team (Takım)", 
+    "8. Sustainability (Sürdürülebilirlik)"
+]
 
 # --- 2. VERİ YÖNETİMİ ---
 def load_data():
@@ -68,7 +89,6 @@ if page == "Scoring Panel":
             team_choice = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_key]["teams"])
             
             if team_choice != "Seçiniz...":
-                # Sıfırlama Garantisi için Unique Key
                 key_id = f"{full_name}_{team_choice}_{mode}".replace(" ", "_")
                 existing = master_df[(master_df['Judge'] == full_name) & (master_df['Team'] == team_choice) & (master_df['Category'] == mode)] if not master_df.empty else pd.DataFrame()
 
@@ -84,22 +104,39 @@ if page == "Scoring Panel":
                 for title in criteria_list:
                     st.markdown(f"#### {title}")
                     col1, col2 = st.columns([1, 1])
-                    # JÜRİNİN VERDİĞİ ESKİ PUANLARI GÖSTERME
-                    def_sc = int(existing[f"{title}_Score"].values[0]) if is_locked else 3
-                    def_fb = str(existing[f"{title}_Feedback"].values[0]) if is_locked and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
+                    
+                    # Puan verisini çekme (Error handling eklenmiştir)
+                    score_col = f"{title}_Score"
+                    fb_col = f"{title}_Feedback"
+                    
+                    def_sc = 3
+                    if is_locked and score_col in existing.columns:
+                        def_sc = int(existing[score_col].values[0])
+                    
+                    def_fb = ""
+                    if is_locked and fb_col in existing.columns:
+                        def_fb = str(existing[fb_col].values[0]) if not pd.isna(existing[fb_col].values[0]) else ""
                     
                     with col1:
                         v = st.select_slider("Puan", options=[1,2,3,4,5], value=def_sc, disabled=is_locked, key=f"s_{key_id}_{title}")
                         st.info(SCORE_GUIDE[v])
-                        new_entries[f"{title}_Score"] = v
+                        new_entries[score_col] = v
                     with col2:
                         f = st.text_area("Notlar", value=def_fb, disabled=is_locked, key=f"f_{key_id}_{title}")
-                        new_entries[f"{title}_Feedback"] = f
+                        new_entries[fb_col] = f
                     st.divider()
 
                 if not is_locked and st.button("💾 Kaydet ve Paylaş"):
                     total = sum([val for k, val in new_entries.items() if "_Score" in k])
-                    entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_key, "Team": team_choice, "Category": mode, **new_entries, "Total_Score": total}
+                    entry = {
+                        "Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), 
+                        "Judge": full_name, 
+                        "Session": sess_key, 
+                        "Team": team_choice, 
+                        "Category": mode, 
+                        **new_entries, 
+                        "Total_Score": total
+                    }
                     if not master_df.empty:
                         master_df = master_df[~((master_df['Judge'] == full_name) & (master_df['Team'] == team_choice) & (master_df['Category'] == mode))]
                     master_df = pd.concat([master_df, pd.DataFrame([entry])], ignore_index=True)
@@ -137,13 +174,15 @@ elif page == "Admin Dashboard":
             with t3:
                 st.subheader("Detaylı Sunum Tablosu")
                 p_full = master_df[master_df['Category'] == "Presentation Scoring"]
-                st.dataframe(p_full)
+                # Sütunları daha okunur hale getir
+                st.dataframe(p_full, use_container_width=True)
                 st.download_button("Tüm Sunum Verilerini İndir", p_full.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Sunum_Detay.csv")
 
             with t4:
                 st.subheader("Detaylı Worksheet Tablosu")
                 w_full = master_df[master_df['Category'] == "Worksheet Scoring"]
-                st.dataframe(w_full)
+                # Worksheet tablosunda tüm kriterlerin puan ve feedbackleri artık sütun bazlı net gözükür
+                st.dataframe(w_full, use_container_width=True)
                 st.download_button("Tüm Worksheet Verilerini İndir", w_full.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Worksheet_Detay.csv")
 
             with t5:
@@ -162,4 +201,4 @@ elif page == "Admin Dashboard":
                 if st.button("⚠️ SİSTEMİ SIFIRLA"):
                     if os.path.exists(DATA_FILE): os.remove(DATA_FILE); st.rerun()
         else:
-            st.info("Kayıt bulunamadı.")
+            st.info("Henüz veri yok.")
