@@ -14,7 +14,7 @@ import os
 st.set_page_config(page_title="GCIP 2025 Jury Portal", layout="wide")
 DATA_FILE = "gcip_master_results.csv"
 
-# Orijinal Puan Rehberi (Excel Tanımları)
+# Orijinal Puan Rehberi
 SCORE_GUIDE = {
     5: "🌟 **5 - Keep doing what you’re doing.** Focus on other areas.",
     4: "✅ **4 - Almost there.** Could be better if [……]",
@@ -31,7 +31,7 @@ SESSIONS = {
     "4. Yenilenebilir Enerji+Enerji verimliliği Oturumu": {"date": "25.12.2025", "teams": ["Ion Membranes", "Strategic Innovative Initiatives", "Unda Mühendislik", "MTM Biyoteknoloji", "ComfyAtelier", "Solis Technology", "Sonicpdt", "PhElSyM", "HELIOSTEAM", "Nesea Bio", "Zamia Kompozit", "Posamas", "Chambio Kimya", "Ramer Consulting", "ZincirX", "VEGUS BİYOTEKNOLOJİ", "ENVİCULTURE TARIM"]}
 }
 
-# Excel'den Gelen Orijinal Başlıklar (Topic Names)
+# Excel'deki Orijinal Başlıklar (Topic Names)
 PRES_CRITERIA = [
     "1. Business Description", 
     "2. Customer Discovery", 
@@ -41,7 +41,7 @@ PRES_CRITERIA = [
     "6. Legal", 
     "7. Team", 
     "8. Sustainability", 
-    "9. Presentation Quality"
+    "9. Presentation"
 ]
 
 WORK_CRITERIA = [
@@ -105,7 +105,6 @@ if page == "Scoring Panel":
                     st.markdown(f"#### {title}")
                     col1, col2 = st.columns([1, 1])
                     
-                    # Puan verisini çekme (Error handling eklenmiştir)
                     score_col = f"{title}_Score"
                     fb_col = f"{title}_Feedback"
                     
@@ -118,11 +117,11 @@ if page == "Scoring Panel":
                         def_fb = str(existing[fb_col].values[0]) if not pd.isna(existing[fb_col].values[0]) else ""
                     
                     with col1:
-                        v = st.select_slider("Puan", options=[1,2,3,4,5], value=def_sc, disabled=is_locked, key=f"s_{key_id}_{title}")
+                        v = st.select_slider(f"Puan ({title})", options=[1,2,3,4,5], value=def_sc, disabled=is_locked, key=f"s_{key_id}_{title}")
                         st.info(SCORE_GUIDE[v])
                         new_entries[score_col] = v
                     with col2:
-                        f = st.text_area("Notlar", value=def_fb, disabled=is_locked, key=f"f_{key_id}_{title}")
+                        f = st.text_area(f"Notlar ({title})", value=def_fb, disabled=is_locked, key=f"f_{key_id}_{title}")
                         new_entries[fb_col] = f
                     st.divider()
 
@@ -150,6 +149,8 @@ elif page == "Admin Dashboard":
         if not master_df.empty:
             t1, t2, t3, t4, t5 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Sunum Detay", "📝 Ödev Detay", "⚙️ Yönetim"])
             
+            base_cols = ["Timestamp", "Judge", "Session", "Team", "Category", "Total_Score"]
+
             with t1:
                 st.subheader("Global Leaderboards")
                 for c in ["Presentation Scoring", "Worksheet Scoring"]:
@@ -169,21 +170,26 @@ elif page == "Admin Dashboard":
                         st.write(f"##### {s}")
                         sr = s_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                         sr.index += 1; st.table(sr)
-                        st.download_button(f"{s} Excel İndir", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}.csv")
 
             with t3:
                 st.subheader("Detaylı Sunum Tablosu")
-                p_full = master_df[master_df['Category'] == "Presentation Scoring"]
-                # Sütunları daha okunur hale getir
-                st.dataframe(p_full, use_container_width=True)
-                st.download_button("Tüm Sunum Verilerini İndir", p_full.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Sunum_Detay.csv")
+                p_full = master_df[master_df['Category'] == "Presentation Scoring"].copy()
+                if not p_full.empty:
+                    # Sadece Sunum sütunlarını filtrele
+                    p_cols = base_cols + [f"{c}_Score" for c in PRES_CRITERIA] + [f"{c}_Feedback" for c in PRES_CRITERIA]
+                    display_cols = [c for c in p_cols if c in p_full.columns]
+                    st.dataframe(p_full[display_cols], use_container_width=True)
+                    st.download_button("Sunum Detay Excel İndir", p_full[display_cols].to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Sunum_Detay.csv")
 
             with t4:
                 st.subheader("Detaylı Worksheet Tablosu")
-                w_full = master_df[master_df['Category'] == "Worksheet Scoring"]
-                # Worksheet tablosunda tüm kriterlerin puan ve feedbackleri artık sütun bazlı net gözükür
-                st.dataframe(w_full, use_container_width=True)
-                st.download_button("Tüm Worksheet Verilerini İndir", w_full.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Worksheet_Detay.csv")
+                w_full = master_df[master_df['Category'] == "Worksheet Scoring"].copy()
+                if not w_full.empty:
+                    # Sadece Worksheet sütunlarını filtrele
+                    w_cols = base_cols + [f"{c}_Score" for c in WORK_CRITERIA] + [f"{c}_Feedback" for c in WORK_CRITERIA]
+                    display_cols = [c for c in w_cols if c in w_full.columns]
+                    st.dataframe(w_full[display_cols], use_container_width=True)
+                    st.download_button("Worksheet Detay Excel İndir", w_full[display_cols].to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Worksheet_Detay.csv")
 
             with t5:
                 st.subheader("Jüri Analizi & Kayıt Yönetimi")
