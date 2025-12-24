@@ -50,7 +50,7 @@ full_name = f"{u_name} {u_surname}"
 if page == "Scoring Panel":
     if not u_name or not u_surname: st.warning("Giriş yapınız.")
     else:
-        st.info("Presentation Scoring")
+        st.info("Kategori: Presentation Scoring")
         sess_sel = st.selectbox("1. Oturum Seçin", ["Seçiniz..."] + list(SESSIONS.keys()))
         if sess_sel != "Seçiniz...":
             team_sel = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_sel]["teams"])
@@ -61,36 +61,28 @@ if page == "Scoring Panel":
 
                 if is_locked:
                     st.success("✅ Kayıtlı.")
-                    if st.button("Puanları Düzenle (Unlock)"): st.session_state.editing_team = team_sel; st.rerun()
+                    if st.button("Unlock"): st.session_state.editing_team = team_sel; st.rerun()
                 else:
                     new_entries = {}
                     for title, desc in CRITERIA_DESC.items():
                         st.markdown(f"#### {title}")
                         st.caption(desc)
                         opts = [0,1,3,5] if "Sustainability" in title else [1,2,3,4,5]
-                        
-                        def_sc = 3 if "Sustainability" not in title else 1
-                        if not existing.empty and f"{title}_Score" in existing.columns:
-                            try: def_sc = int(float(existing[f"{title}_Score"].values[0]))
-                            except: pass
-                        
+                        def_sc = int(float(existing[f"{title}_Score"].values[0])) if not existing.empty else (3 if "Sustainability" not in title else 1)
                         val = st.select_slider(f"Score {title}", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
                         st.info(SUST_SCORE_GUIDE[val] if "Sustainability" in title else SCORE_GUIDE[val])
                         new_entries[f"{title}_Score"] = val
-                        
-                        def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and f"{title}_Feedback" in existing.columns and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
-                        new_entries[f"{title}_Feedback"] = st.text_area(f"Notes {title}", value=def_fb, key=f"f_{team_sel}_{title}")
+                        def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
+                        new_entries[f"{title}_Feedback"] = st.text_area(f"Notlar {title}", value=def_fb, key=f"f_{team_sel}_{title}")
                     
-                    if st.button("💾 Kaydet ve Paylaş"):
+                    if st.button("💾 Kaydet"):
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
                         entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_sel, "Team": team_sel, "Category": "Presentation Scoring", **new_entries, "Total_Score": total}
                         
-                        # 1. Update Detailed CSV (Session 3 & 4 only)
                         latest_det = load_csv(DETAILED_FILE)
                         if not latest_det.empty: latest_det = latest_det[~((latest_det['Judge'] == full_name) & (latest_det['Team'] == team_sel))]
                         save_csv(pd.concat([latest_det, pd.DataFrame([entry])], ignore_index=True), DETAILED_FILE)
                         
-                        # 2. Update Master Ranking CSV (Calculated Mean)
                         current_det = load_csv(DETAILED_FILE)
                         team_avg = current_det[current_det['Team'] == team_sel]['Total_Score'].mean()
                         
