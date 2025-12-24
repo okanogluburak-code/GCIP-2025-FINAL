@@ -11,11 +11,25 @@ import os
 
 # --- 1. AYARLAR ---
 st.set_page_config(page_title="GCIP 2025 Jury Portal", layout="wide")
-MASTER_FILE = "gcip_master_results.csv"   # Sıralamalar (Tüm takımlar)
-DETAILED_FILE = "gcip_detailed_results.csv" # Detaylar (Sadece Session 3-4)
+MASTER_FILE = "gcip_master_results.csv"
+DETAILED_FILE = "gcip_detailed_results.csv"
 
-SCORE_GUIDE = {5: "🌟 5 - Excellent", 4: "✅ 4 - Good", 3: "⚖️ 3 - Average", 2: "🔸 2 - Work Needed", 1: "⚠️ 1 - Major Work Needed"}
-SUST_SCORE_GUIDE = {5: "🦄 5 - Climate Impact Unicorn", 3: "📈 3 - High Impact", 1: "🌱 1 - Positive Impact", 0: "❓ 0 - Insignificant"}
+# Genel Puan Rehberi
+SCORE_GUIDE = {
+    5: "🌟 **5 - Keep doing what you’re doing.** Focus on other areas.",
+    4: "✅ **4 - Almost there.** Could be better if [……]",
+    3: "⚖️ **3 - Mixed.** Key areas for improvement include […]",
+    2: "🔸 **2 - Work needed in this area.** You should focus on [……]",
+    1: "⚠️ **1 - Significant work needed here,** particularly […]"
+}
+
+# 8. Sustainability Rehberi
+SUST_SCORE_GUIDE = {
+    5: "🦄 **5 - Climate Impact Unicorn:** (>1Mt CO2eq per year in year 3)",
+    3: "📈 **3 - High positive climate impact:** (>1Kt CO2eq per year in year 3)",
+    1: "🌱 **1 - Positive climate impact:** (>6.8t CO2eq per year in year 1)",
+    0: "❓ **0 - Insignificant climate impact:** (<6.8t CO2eq per year)"
+}
 
 SESSIONS = {
     "1. İleri Malzemeler ve Kimyasallar Oturumu": {"teams": ["Bio4Life", "EKOHARMONI BIOCYCLING", "MicroExTech", "HELIOS BİLİM VE TEKNOLOJİ", "GMZ Enerji", "Umayana", "Chitolastic", "INOPOLYME KİMYA"]},
@@ -24,11 +38,16 @@ SESSIONS = {
     "4. Yenilenebilir Enerji+Enerji verimliliği Oturumu": {"teams": ["Ion Membranes", "Strategic Innovative Initiatives", "Unda Mühendislik", "MTM Biyoteknoloji", "ComfyAtelier", "Solis Technology", "Sonicpdt", "PhElSyM", "HELIOSTEAM", "Nesea Bio", "Zamia Kompozit", "Posamas", "Chambio Kimya", "Ramer Consulting", "ZincirX", "VEGUS BİYOTEKNOLOJİ", "ENVİCULTURE TARIM"]}
 }
 
-CRITERIA_DESC = {
-    "1. Business Description": "Functional activities clarity?", "2. Customer Discovery": "Validated pain/market?",
-    "3. Product/Technology Validation": "Tech validated?", "4. Go-To-Market Tactics / Sales Model": "Sales model?",
-    "5. Finances and Funding": "Finances?", "6. Legal": "IP?", "7. Team": "Skills?",
-    "8. Sustainability": "Climate impact (0,1,3,5)?", "9. Presentation": "Pitch/Q&A?"
+PRES_CRITERIA_DATA = {
+    "1. Business Description": "Do they know what all the required functional activities are of their proposed business?",
+    "2. Customer Discovery": "A. Clearly validated pain or problem? B. Specific beachhead segment? C. First $1 million revenue path? D. Pilot customers?",
+    "3. Product/Technology Validation": "A. Third-party validated? B. Clear competitive advantage? C. Roadmap for prototype/commercial product? D. Profitable scaling?",
+    "4. Go-To-Market Tactics / Sales Model": "A. Customer-validated model for sales growth? B. Channel/strategic partner strategy for adjacent segments?",
+    "5. Finances and Funding": "A. Credible revenue/cost projections? B. Clear and logical strategy for the sources and uses of funds?",
+    "6. Legal": "A. IP patentability and defensible? B. Corporate and cap structure free of issues?",
+    "7. Team": "A. Relevant skills and appropriate connections? B. Aware of skill gaps and how to fill them?",
+    "8. Sustainability": "Climate impact potential and SDG address. (Scoring: 0, 1, 3, 5)",
+    "9. Presentation": "A. Clear presentation & Q&A? B. Complete Business Model elements? C. Compelling investment opportunity?"
 }
 
 def load_csv(file):
@@ -48,9 +67,9 @@ u_surname = st.sidebar.text_input("Soyad").strip()
 full_name = f"{u_name} {u_surname}"
 
 if page == "Scoring Panel":
-    if not u_name or not u_surname: st.warning("Giriş yapınız.")
+    if not u_name or not u_surname: st.warning("Lütfen Ad ve Soyad girerek giriş yapınız.")
     else:
-        st.info("Presentation Scoring")
+        st.info("Kategori: Presentation Scoring")
         sess_sel = st.selectbox("1. Oturum Seçin", ["Seçiniz..."] + list(SESSIONS.keys()))
         if sess_sel != "Seçiniz...":
             team_sel = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_sel]["teams"])
@@ -60,30 +79,47 @@ if page == "Scoring Panel":
                 is_locked = not existing.empty and st.session_state.editing_team != team_sel
 
                 if is_locked:
-                    st.success("✅ Puanlar kayıtlı.")
-                    if st.button("Puanları Düzenle (Unlock)"): st.session_state.editing_team = team_sel; st.rerun()
+                    st.success(f"✅ {team_sel} için puanlarınız kaydedilmiştir.")
+                    if st.button("Puanları Düzenle (Unlock)"): 
+                        st.session_state.editing_team = team_sel
+                        st.rerun()
                 else:
                     new_entries = {}
-                    for title, desc in CRITERIA_DESC.items():
-                        st.markdown(f"#### {title}")
+                    for title, desc in PRES_CRITERIA_DATA.items():
+                        st.markdown(f"### {title}")
                         st.caption(desc)
-                        opts = [0,1,3,5] if "Sustainability" in title else [1,2,3,4,5]
-                        def_sc = int(float(existing[f"{title}_Score"].values[0])) if not existing.empty else (3 if "Sustainability" not in title else 1)
-                        val = st.select_slider(f"Score {title}", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
-                        new_entries[f"{title}_Score"] = val
-                        def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
-                        new_entries[f"{title}_Feedback"] = st.text_area(f"Notlar {title}", value=def_fb, key=f"f_{team_sel}_{title}")
+                        
+                        col1, col2 = st.columns([1, 1])
+                        opts = [0, 1, 3, 5] if "Sustainability" in title else [1, 2, 3, 4, 5]
+                        
+                        # Varsayılan puan
+                        def_sc = 3 if "Sustainability" not in title else 1
+                        if not existing.empty and f"{title}_Score" in existing.columns:
+                            try: def_sc = int(float(existing[f"{title}_Score"].values[0]))
+                            except: pass
+                        
+                        with col1:
+                            val = st.select_slider(f"Puan ({title})", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
+                            # DİNAMİK REHBER GÖSTERİMİ
+                            if "Sustainability" in title: st.info(SUST_SCORE_GUIDE[val])
+                            else: st.info(SCORE_GUIDE[val])
+                            new_entries[f"{title}_Score"] = val
+                        
+                        with col2:
+                            def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and f"{title}_Feedback" in existing.columns and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
+                            new_entries[f"{title}_Feedback"] = st.text_area(f"Notlar ({title})", value=def_fb, key=f"f_{team_sel}_{title}")
+                        st.divider()
                     
-                    if st.button("💾 Kaydet"):
+                    if st.button("💾 Kaydet ve Paylaş"):
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
                         entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_sel, "Team": team_sel, "Category": "Presentation Scoring", **new_entries, "Total_Score": total}
                         
-                        # 1. Update Detailed CSV
+                        # 1. Detaylı Dosyayı Güncelle
                         latest_det = load_csv(DETAILED_FILE)
                         if not latest_det.empty: latest_det = latest_det[~((latest_det['Judge'] == full_name) & (latest_det['Team'] == team_sel))]
                         save_csv(pd.concat([latest_det, pd.DataFrame([entry])], ignore_index=True), DETAILED_FILE)
                         
-                        # 2. Update Master Ranking CSV (Ortalamayı günceller)
+                        # 2. Master (Sıralama) Dosyasını Güncelle
                         current_det = load_csv(DETAILED_FILE)
                         team_avg = current_det[current_det['Team'] == team_sel]['Total_Score'].mean()
                         latest_mast = load_csv(MASTER_FILE)
@@ -92,21 +128,23 @@ if page == "Scoring Panel":
                         save_csv(pd.concat([latest_mast, pd.DataFrame([m_entry])], ignore_index=True), MASTER_FILE)
                         
                         st.session_state.editing_team = None
-                        st.success("Kaydedildi!"); st.rerun()
+                        st.success("Kaydedildi!"); st.balloons(); st.rerun()
 
 elif page == "Admin Dashboard":
-    if st.text_input("Şifre", type="password") == "GCIP2025*":
+    if st.text_input("Yönetici Şifresi", type="password") == "GCIP2025*":
         master_df = load_csv(MASTER_FILE)
         detailed_df = load_csv(DETAILED_FILE)
         
         t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Sunum Detay Tablosu"])
         with t1:
+            st.subheader("Global Leaderboard")
             if not master_df.empty:
                 res = master_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                 res.index += 1
                 st.table(res)
-                st.download_button("Excel İndir", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
+                st.download_button("Genel Sıralama Excel İndir", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
         with t2:
+            st.subheader("Oturum Bazlı Sıralama")
             if not master_df.empty:
                 for s in SESSIONS.keys():
                     s_df = master_df[master_df['Session'] == s]
@@ -115,8 +153,9 @@ elif page == "Admin Dashboard":
                         sr = s_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                         sr.index += 1
                         st.table(sr)
-                        st.download_button(f"Excel ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Rank.csv")
+                        st.download_button(f"Excel İndir ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Ranking.csv")
         with t3:
+            st.subheader("Sunum Detay Tablosu (3. ve 4. Oturum)")
             if not detailed_df.empty:
-                st.dataframe(detailed_df)
-                st.download_button("Excel İndir", detailed_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Detailed_Report.csv")
+                st.dataframe(detailed_df, use_container_width=True)
+                st.download_button("Tüm Detaylı Veriyi Excel İndir", detailed_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Detailed_Report.csv")
