@@ -100,7 +100,6 @@ if page == "Scoring Panel":
                         
                         with col1:
                             val = st.select_slider(f"Puan ({title})", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
-                            # DİNAMİK REHBER GÖSTERİMİ
                             if "Sustainability" in title: st.info(SUST_SCORE_GUIDE[val])
                             else: st.info(SCORE_GUIDE[val])
                             new_entries[f"{title}_Score"] = val
@@ -114,12 +113,10 @@ if page == "Scoring Panel":
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
                         entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_sel, "Team": team_sel, "Category": "Presentation Scoring", **new_entries, "Total_Score": total}
                         
-                        # 1. Detaylı Dosyayı Güncelle
                         latest_det = load_csv(DETAILED_FILE)
                         if not latest_det.empty: latest_det = latest_det[~((latest_det['Judge'] == full_name) & (latest_det['Team'] == team_sel))]
                         save_csv(pd.concat([latest_det, pd.DataFrame([entry])], ignore_index=True), DETAILED_FILE)
                         
-                        # 2. Master (Sıralama) Dosyasını Güncelle
                         current_det = load_csv(DETAILED_FILE)
                         team_avg = current_det[current_det['Team'] == team_sel]['Total_Score'].mean()
                         latest_mast = load_csv(MASTER_FILE)
@@ -135,7 +132,8 @@ elif page == "Admin Dashboard":
         master_df = load_csv(MASTER_FILE)
         detailed_df = load_csv(DETAILED_FILE)
         
-        t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Sunum Detay Tablosu"])
+        t1, t2, t3, t4 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Sunum Detay Tablosu", "⚙️ Yönetim"])
+        
         with t1:
             st.subheader("Global Leaderboard")
             if not master_df.empty:
@@ -143,6 +141,7 @@ elif page == "Admin Dashboard":
                 res.index += 1
                 st.table(res)
                 st.download_button("Genel Sıralama Excel İndir", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
+        
         with t2:
             st.subheader("Oturum Bazlı Sıralama")
             if not master_df.empty:
@@ -154,8 +153,48 @@ elif page == "Admin Dashboard":
                         sr.index += 1
                         st.table(sr)
                         st.download_button(f"Excel İndir ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Ranking.csv")
+        
         with t3:
-            st.subheader("Sunum Detay Tablosu (3. ve 4. Oturum)")
+            st.subheader("Sunum Detay Tablosu")
             if not detailed_df.empty:
-                st.dataframe(detailed_df, use_container_width=True)
-                st.download_button("Tüm Detaylı Veriyi Excel İndir", detailed_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Detailed_Report.csv")
+                for s_name in SESSIONS.keys():
+                    s_det_df = detailed_df[detailed_df['Session'] == s_name]
+                    if not s_det_df.empty:
+                        st.write(f"##### {s_name}")
+                        st.dataframe(s_det_df, use_container_width=True)
+                        st.download_button(f"Excel İndir ({s_name})", s_det_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), f"{s_name}_Detayli.csv", key=f"dl_{s_name}")
+            else:
+                st.info("Detaylı veri bulunamadı.")
+
+        with t4:
+            st.subheader("⚙️ Kayıt ve Puan Yönetimi")
+            if not detailed_df.empty:
+                st.write("Mevcut jüri oylarını buradan silebilirsiniz:")
+                # Kayıt Silme
+                record_list = [f"{r['Judge']} | {r['Team']} | {r['Session']}" for _, r in detailed_df.iterrows()]
+                to_delete = st.selectbox("Silinecek Kaydı Seçin:", ["Seçiniz..."] + record_list)
+                
+                if to_delete != "Seçiniz...":
+                    if st.button("Seçili Puanı Sil"):
+                        j_name, t_name, s_name = to_delete.split(" | ")
+                        # Detailed Sil
+                        detailed_df = detailed_df[~((detailed_df['Judge'] == j_name) & (detailed_df['Team'] == t_name))]
+                        save_csv(detailed_df, DETAILED_FILE)
+                        # Master Güncelle
+                        new_avg = detailed_df[detailed_df['Team'] == t_name]['Total_Score'].mean()
+                        master_df = load_csv(MASTER_FILE)
+                        master_df = master_df[~(master_df['Team'] == t_name)]
+                        if not pd.isna(new_avg):
+                            m_entry = {"Team": t_name, "Total_Score": round(new_avg, 2), "Session": s_name}
+                            master_df = pd.concat([master_df, pd.DataFrame([m_entry])], ignore_index=True)
+                        save_csv(master_df, MASTER_FILE)
+                        st.success("Kayıt başarıyla silindi.")
+                        st.rerun()
+            
+            st.divider()
+            st.warning("Tehlikeli Bölge")
+            if st.button("⚠️ TÜM PUANLARI SIFIRLA"):
+                if os.path.exists(MASTER_FILE): os.remove(MASTER_FILE)
+                if os.path.exists(DETAILED_FILE): os.remove(DETAILED_FILE)
+                st.error("Tüm veritabanı sıfırlandı. Sayfa yenileniyor...")
+                st.rerun()
