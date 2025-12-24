@@ -4,7 +4,6 @@ Created on Wed Dec 17 16:30:08 2025
 
 @author: burak.okanoglu
 """
-
 import streamlit as st
 import pandas as pd
 import datetime
@@ -15,7 +14,7 @@ st.set_page_config(page_title="GCIP 2025 Jury Portal", layout="wide")
 DATA_FILE = "gcip_master_results.csv"
 
 SCORE_GUIDE = {5: "🌟 5 - Excellent", 4: "✅ 4 - Good", 3: "⚖️ 3 - Average", 2: "🔸 2 - Work Needed", 1: "⚠️ 1 - Major Work Needed"}
-SUST_SCORE_GUIDE = {5: "🦄 5 - Climate Unicorn", 3: "📈 3 - High Impact", 1: "🌱 1 - Positive Impact", 0: "❓ 0 - Insignificant"}
+SUST_SCORE_GUIDE = {5: "🦄 5 - Climate Impact Unicorn", 3: "📈 3 - High Impact", 1: "🌱 1 - Positive Impact", 0: "❓ 0 - Insignificant"}
 
 SESSIONS = {
     "1. İleri Malzemeler ve Kimyasallar Oturumu": {"teams": ["Bio4Life", "EKOHARMONI BIOCYCLING", "MicroExTech", "HELIOS BİLİM VE TEKNOLOJİ", "GMZ Enerji", "Umayana", "Chitolastic", "INOPOLYME KİMYA"]},
@@ -41,6 +40,8 @@ def save_all_data(df):
 
 if 'editing_team' not in st.session_state: st.session_state.editing_team = None
 
+master_df = load_data()
+
 # --- SIDEBAR ---
 st.sidebar.title("🏆 GCIP 2025 PORTAL")
 page = st.sidebar.selectbox("Sayfa Seçin:", ["Scoring Panel", "Admin Dashboard"])
@@ -49,9 +50,9 @@ u_surname = st.sidebar.text_input("Soyad").strip()
 full_name = f"{u_name} {u_surname}"
 
 if page == "Scoring Panel":
-    if not u_name or not u_surname: st.warning("Giriş yapınız.")
+    if not u_name or not u_surname: st.warning("Ad-Soyad giriniz.")
     else:
-        st.info("Kategori: Presentation Scoring")
+        st.info("Presentation Scoring")
         sess_sel = st.selectbox("1. Oturum Seçin", ["Seçiniz..."] + list(SESSIONS.keys()))
         if sess_sel != "Seçiniz...":
             team_sel = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_sel]["teams"])
@@ -72,10 +73,10 @@ if page == "Scoring Panel":
                         st.caption(desc)
                         opts = [0,1,3,5] if "Sustainability" in title else [1,2,3,4,5]
                         
-                        # Get default score if exists
                         def_sc = 3 if "Sustainability" not in title else 1
                         if not existing.empty and f"{title}_Score" in existing.columns:
-                            def_sc = int(existing[f"{title}_Score"].values[0])
+                            try: def_sc = int(float(existing[f"{title}_Score"].values[0]))
+                            except: pass
                         
                         val = st.select_slider(f"Score {title}", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
                         st.info(SUST_SCORE_GUIDE[val] if "Sustainability" in title else SCORE_GUIDE[val])
@@ -84,7 +85,7 @@ if page == "Scoring Panel":
                         def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and f"{title}_Feedback" in existing.columns and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
                         new_entries[f"{title}_Feedback"] = st.text_area(f"Notes {title}", value=def_fb, key=f"f_{team_sel}_{title}")
                     
-                    if st.button("💾 Kaydet ve Paylaş"):
+                    if st.button("💾 Kaydet"):
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
                         entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_sel, "Team": team_sel, "Category": "Presentation Scoring", **new_entries, "Total_Score": total}
                         latest_df = load_data()
@@ -100,12 +101,18 @@ elif page == "Admin Dashboard":
             t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Detaylı Tablo"])
             with t1:
                 res = master_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
+                res.index += 1
                 st.table(res)
+                st.download_button("Genel Sıralama Excel", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
             with t2:
-                s_sel = st.selectbox("Oturum", list(SESSIONS.keys()))
-                st.table(master_df[master_df['Session'] == s_sel].groupby("Team")["Total_Score"].mean().sort_values(ascending=False))
+                for s_key in SESSIONS.keys():
+                    s_df = master_df[master_df['Session'] == s_key]
+                    if not s_df.empty:
+                        st.write(f"##### {s_key}")
+                        sr = s_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
+                        sr.index += 1
+                        st.table(sr)
+                        st.download_button(f"{s_key} İndir", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s_key}_Ranking.csv")
             with t3:
                 st.dataframe(master_df)
-                st.download_button("Full Data Excel", master_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "All_Data.csv")
-
-
+                st.download_button("Tüm Detaylı Veri Excel", master_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "All_Jury_Details.csv")
