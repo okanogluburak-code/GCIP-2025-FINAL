@@ -11,7 +11,8 @@ import os
 
 # --- 1. AYARLAR ---
 st.set_page_config(page_title="GCIP 2025 Jury Portal", layout="wide")
-DATA_FILE = "gcip_master_results.csv"
+MASTER_FILE = "gcip_master_results.csv"
+DETAILED_FILE = "gcip_detailed_results.csv"
 
 SCORE_GUIDE = {5: "🌟 5 - Excellent", 4: "✅ 4 - Good", 3: "⚖️ 3 - Average", 2: "🔸 2 - Work Needed", 1: "⚠️ 1 - Major Work Needed"}
 SUST_SCORE_GUIDE = {5: "🦄 5 - Climate Impact Unicorn", 3: "📈 3 - High Impact", 1: "🌱 1 - Positive Impact", 0: "❓ 0 - Insignificant"}
@@ -25,22 +26,19 @@ SESSIONS = {
 
 CRITERIA_DESC = {
     "1. Business Description": "Functional activities clarity?", "2. Customer Discovery": "Validated pain/market?",
-    "3. Product/Technology Validation": "Third-party validated?", "4. Go-To-Market Tactics / Sales Model": "Sales model?",
-    "5. Finances and Funding": "Credible projections?", "6. Legal": "IP/defensibility?",
-    "7. Team": "Relevant skills?", "8. Sustainability": "Climate impact (0,1,3,5)?", "9. Presentation": "Pitch/Q&A?"
+    "3. Product/Technology Validation": "Tech validated?", "4. Go-To-Market Tactics / Sales Model": "Sales model?",
+    "5. Finances and Funding": "Finances?", "6. Legal": "IP?", "7. Team": "Skills?",
+    "8. Sustainability": "Climate impact (0,1,3,5)?", "9. Presentation": "Pitch/Q&A?"
 }
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE, sep=';', encoding='utf-8-sig')
+def load_csv(file):
+    if os.path.exists(file): return pd.read_csv(file, sep=';', encoding='utf-8-sig')
     return pd.DataFrame()
 
-def save_all_data(df):
-    df.to_csv(DATA_FILE, index=False, sep=';', encoding='utf-8-sig')
+def save_csv(df, file):
+    df.to_csv(file, index=False, sep=';', encoding='utf-8-sig')
 
 if 'editing_team' not in st.session_state: st.session_state.editing_team = None
-
-master_df = load_data()
 
 # --- SIDEBAR ---
 st.sidebar.title("🏆 GCIP 2025 PORTAL")
@@ -50,22 +48,20 @@ u_surname = st.sidebar.text_input("Soyad").strip()
 full_name = f"{u_name} {u_surname}"
 
 if page == "Scoring Panel":
-    if not u_name or not u_surname: st.warning("Ad-Soyad giriniz.")
+    if not u_name or not u_surname: st.warning("Giriş yapınız.")
     else:
         st.info("Presentation Scoring")
         sess_sel = st.selectbox("1. Oturum Seçin", ["Seçiniz..."] + list(SESSIONS.keys()))
         if sess_sel != "Seçiniz...":
             team_sel = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_sel]["teams"])
             if team_sel != "Seçiniz...":
-                master_df = load_data()
-                existing = master_df[(master_df['Judge'] == full_name) & (master_df['Team'] == team_sel)] if not master_df.empty else pd.DataFrame()
+                detailed_df = load_csv(DETAILED_FILE)
+                existing = detailed_df[(detailed_df['Judge'] == full_name) & (detailed_df['Team'] == team_sel)] if not detailed_df.empty else pd.DataFrame()
                 is_locked = not existing.empty and st.session_state.editing_team != team_sel
 
                 if is_locked:
-                    st.success("✅ Puanlar kayıtlı.")
-                    if st.button("Puanları Düzenle (Unlock)"): 
-                        st.session_state.editing_team = team_sel
-                        st.rerun()
+                    st.success("✅ Kayıtlı.")
+                    if st.button("Puanları Düzenle (Unlock)"): st.session_state.editing_team = team_sel; st.rerun()
                 else:
                     new_entries = {}
                     for title, desc in CRITERIA_DESC.items():
@@ -85,34 +81,50 @@ if page == "Scoring Panel":
                         def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and f"{title}_Feedback" in existing.columns and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
                         new_entries[f"{title}_Feedback"] = st.text_area(f"Notes {title}", value=def_fb, key=f"f_{team_sel}_{title}")
                     
-                    if st.button("💾 Kaydet"):
+                    if st.button("💾 Kaydet ve Paylaş"):
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
                         entry = {"Timestamp": datetime.datetime.now().strftime("%d-%m-%Y %H:%M"), "Judge": full_name, "Session": sess_sel, "Team": team_sel, "Category": "Presentation Scoring", **new_entries, "Total_Score": total}
-                        latest_df = load_data()
-                        if not latest_df.empty: latest_df = latest_df[~((latest_df['Judge'] == full_name) & (latest_df['Team'] == team_sel))]
-                        save_all_data(pd.concat([latest_df, pd.DataFrame([entry])], ignore_index=True))
+                        
+                        # 1. Update Detailed CSV (Session 3 & 4 only)
+                        latest_det = load_csv(DETAILED_FILE)
+                        if not latest_det.empty: latest_det = latest_det[~((latest_det['Judge'] == full_name) & (latest_det['Team'] == team_sel))]
+                        save_csv(pd.concat([latest_det, pd.DataFrame([entry])], ignore_index=True), DETAILED_FILE)
+                        
+                        # 2. Update Master Ranking CSV (Calculated Mean)
+                        current_det = load_csv(DETAILED_FILE)
+                        team_avg = current_det[current_det['Team'] == team_sel]['Total_Score'].mean()
+                        
+                        latest_mast = load_csv(MASTER_FILE)
+                        if not latest_mast.empty: latest_mast = latest_mast[~((latest_mast['Team'] == team_sel) & (latest_mast['Session'] == sess_sel))]
+                        m_entry = {"Team": team_sel, "Total_Score": round(team_avg, 2), "Session": sess_sel}
+                        save_csv(pd.concat([latest_mast, pd.DataFrame([m_entry])], ignore_index=True), MASTER_FILE)
+                        
                         st.session_state.editing_team = None
                         st.success("Kaydedildi!"); st.rerun()
 
 elif page == "Admin Dashboard":
     if st.text_input("Şifre", type="password") == "GCIP2025*":
-        master_df = load_data()
-        if not master_df.empty:
-            t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Detaylı Tablo"])
-            with t1:
+        master_df = load_csv(MASTER_FILE)
+        detailed_df = load_csv(DETAILED_FILE)
+        
+        t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Sunum Detay Tablosu"])
+        with t1:
+            if not master_df.empty:
                 res = master_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                 res.index += 1
                 st.table(res)
-                st.download_button("Genel Sıralama Excel", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
-            with t2:
-                for s_key in SESSIONS.keys():
-                    s_df = master_df[master_df['Session'] == s_key]
+                st.download_button("Excel İndir", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Global_Ranking.csv")
+        with t2:
+            if not master_df.empty:
+                for s in SESSIONS.keys():
+                    s_df = master_df[master_df['Session'] == s]
                     if not s_df.empty:
-                        st.write(f"##### {s_key}")
+                        st.write(f"##### {s}")
                         sr = s_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                         sr.index += 1
                         st.table(sr)
-                        st.download_button(f"{s_key} İndir", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s_key}_Ranking.csv")
-            with t3:
-                st.dataframe(master_df)
-                st.download_button("Tüm Detaylı Veri Excel", master_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "All_Jury_Details.csv")
+                        st.download_button(f"Excel ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Rank.csv")
+        with t3:
+            if not detailed_df.empty:
+                st.dataframe(detailed_df)
+                st.download_button("Excel İndir", detailed_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "Detailed_Report.csv")
