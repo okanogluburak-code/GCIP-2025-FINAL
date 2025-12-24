@@ -41,8 +41,6 @@ def save_all_data(df):
 
 if 'editing_team' not in st.session_state: st.session_state.editing_team = None
 
-master_df = load_data()
-
 # --- SIDEBAR ---
 st.sidebar.title("🏆 GCIP 2025 PORTAL")
 page = st.sidebar.selectbox("Sayfa Seçin:", ["Scoring Panel", "Admin Dashboard"])
@@ -51,20 +49,19 @@ u_surname = st.sidebar.text_input("Soyad").strip()
 full_name = f"{u_name} {u_surname}"
 
 if page == "Scoring Panel":
-    if not u_name or not u_surname: st.warning("Ad-Soyad girerek giriş yapınız.")
+    if not u_name or not u_surname: st.warning("Giriş yapınız.")
     else:
-        st.info("Presentation Scoring")
+        st.info("Kategori: Presentation Scoring")
         sess_sel = st.selectbox("1. Oturum Seçin", ["Seçiniz..."] + list(SESSIONS.keys()))
         if sess_sel != "Seçiniz...":
             team_sel = st.selectbox("2. Takım Seçin", ["Seçiniz..."] + SESSIONS[sess_sel]["teams"])
             if team_sel != "Seçiniz...":
-                # Veriyi Tazeleyerek Kontrol Et
                 master_df = load_data()
                 existing = master_df[(master_df['Judge'] == full_name) & (master_df['Team'] == team_sel)] if not master_df.empty else pd.DataFrame()
                 is_locked = not existing.empty and st.session_state.editing_team != team_sel
 
                 if is_locked:
-                    st.success("✅ Puanlarınız kaydedilmiştir.")
+                    st.success("✅ Puanlar kayıtlı.")
                     if st.button("Puanları Düzenle (Unlock)"): 
                         st.session_state.editing_team = team_sel
                         st.rerun()
@@ -74,11 +71,18 @@ if page == "Scoring Panel":
                         st.markdown(f"#### {title}")
                         st.caption(desc)
                         opts = [0,1,3,5] if "Sustainability" in title else [1,2,3,4,5]
-                        val = st.select_slider(f"Score {title}", options=opts, key=f"s_{team_sel}_{title}")
-                        if "Sustainability" in title: st.info(SUST_SCORE_GUIDE[val])
-                        else: st.info(SCORE_GUIDE[val])
+                        
+                        # Get default score if exists
+                        def_sc = 3 if "Sustainability" not in title else 1
+                        if not existing.empty and f"{title}_Score" in existing.columns:
+                            def_sc = int(existing[f"{title}_Score"].values[0])
+                        
+                        val = st.select_slider(f"Score {title}", options=opts, value=def_sc, key=f"s_{team_sel}_{title}")
+                        st.info(SUST_SCORE_GUIDE[val] if "Sustainability" in title else SCORE_GUIDE[val])
                         new_entries[f"{title}_Score"] = val
-                        new_entries[f"{title}_Feedback"] = st.text_area(f"Notes {title}", key=f"f_{team_sel}_{title}")
+                        
+                        def_fb = str(existing[f"{title}_Feedback"].values[0]) if not existing.empty and f"{title}_Feedback" in existing.columns and not pd.isna(existing[f"{title}_Feedback"].values[0]) else ""
+                        new_entries[f"{title}_Feedback"] = st.text_area(f"Notes {title}", value=def_fb, key=f"f_{team_sel}_{title}")
                     
                     if st.button("💾 Kaydet ve Paylaş"):
                         total = sum([v for k,v in new_entries.items() if "_Score" in k])
@@ -90,17 +94,18 @@ if page == "Scoring Panel":
                         st.success("Kaydedildi!"); st.rerun()
 
 elif page == "Admin Dashboard":
-    if st.text_input("Yönetici Şifresi", type="password") == "GCIP2025*":
+    if st.text_input("Şifre", type="password") == "GCIP2025*":
         master_df = load_data()
         if not master_df.empty:
             t1, t2, t3 = st.tabs(["📊 Genel Sıralama", "📅 Oturum Bazlı", "🎤 Detaylı Tablo"])
             with t1:
                 res = master_df.groupby("Team")["Total_Score"].mean().sort_values(ascending=False).reset_index()
                 st.table(res)
-                st.download_button("Excel İndir", res.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), "Ranking.csv")
             with t2:
                 s_sel = st.selectbox("Oturum", list(SESSIONS.keys()))
                 st.table(master_df[master_df['Session'] == s_sel].groupby("Team")["Total_Score"].mean().sort_values(ascending=False))
             with t3:
                 st.dataframe(master_df)
+                st.download_button("Full Data Excel", master_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), "All_Data.csv")
+
 
