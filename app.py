@@ -154,17 +154,31 @@ elif page == "Admin Dashboard":
                         st.table(sr)
                         st.download_button(f"Excel İndir ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Ranking.csv")
         
-        with t3:
-            st.subheader("Sunum Detay Tablosu")
-            if not detailed_df.empty:
-                for s_name in SESSIONS.keys():
-                    s_det_df = detailed_df[detailed_df['Session'] == s_name]
-                    if not s_det_df.empty:
-                        st.write(f"##### {s_name}")
-                        st.dataframe(s_det_df, use_container_width=True)
-                        st.download_button(f"Excel İndir ({s_name})", s_det_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'), f"{s_name}_Detayli.csv", key=f"dl_{s_name}")
-            else:
-                st.info("Detaylı veri bulunamadı.")
+       with t3:
+    st.subheader("🎤 Sunum Detay Tablosu (Oturum Bazlı)")
+    detailed_df = load_csv(DETAILED_FILE)
+    
+    if not detailed_df.empty:
+        # Mevcut oturumları döngüye al
+        for s_name in SESSIONS.keys():
+            # Sadece bu oturuma ait verileri filtrele
+            s_det_df = detailed_df[detailed_df['Session'] == s_name]
+            
+            if not s_det_df.empty:
+                st.markdown(f"### 📅 {s_name}")
+                st.dataframe(s_det_df, use_container_width=True)
+                
+                # Excel indirme butonu
+                st.download_button(
+                    label=f"📥 {s_name} Detaylarını Excel Olarak İndir",
+                    data=s_det_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'),
+                    file_name=f"{s_name}_Detayli_Rapor.csv",
+                    mime="text/csv",
+                    key=f"dl_btn_{s_name}"
+                )
+                st.divider()
+    else:
+        st.info("Henüz detaylı puan girişi bulunmuyor.")
 
         with t4:
             st.subheader("⚙️ Kayıt ve Puan Yönetimi")
@@ -198,3 +212,4 @@ elif page == "Admin Dashboard":
                 if os.path.exists(DETAILED_FILE): os.remove(DETAILED_FILE)
                 st.error("Tüm veritabanı sıfırlandı. Sayfa yenileniyor...")
                 st.rerun()
+
