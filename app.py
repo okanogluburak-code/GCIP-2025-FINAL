@@ -92,7 +92,6 @@ if page == "Scoring Panel":
                         col1, col2 = st.columns([1, 1])
                         opts = [0, 1, 3, 5] if "Sustainability" in title else [1, 2, 3, 4, 5]
                         
-                        # Varsayılan puan
                         def_sc = 3 if "Sustainability" not in title else 1
                         if not existing.empty and f"{title}_Score" in existing.columns:
                             try: def_sc = int(float(existing[f"{title}_Score"].values[0]))
@@ -153,48 +152,38 @@ elif page == "Admin Dashboard":
                         sr.index += 1
                         st.table(sr)
                         st.download_button(f"Excel İndir ({s})", sr.to_csv(sep=';', index=True, encoding='utf-8-sig').encode('utf-8-sig'), f"{s}_Ranking.csv")
-        
-       with t3:
-    st.subheader("🎤 Sunum Detay Tablosu (Oturum Bazlı)")
-    detailed_df = load_csv(DETAILED_FILE)
-    
-    if not detailed_df.empty:
-        # Mevcut oturumları döngüye al
-        for s_name in SESSIONS.keys():
-            # Sadece bu oturuma ait verileri filtrele
-            s_det_df = detailed_df[detailed_df['Session'] == s_name]
-            
-            if not s_det_df.empty:
-                st.markdown(f"### 📅 {s_name}")
-                st.dataframe(s_det_df, use_container_width=True)
-                
-                # Excel indirme butonu
-                st.download_button(
-                    label=f"📥 {s_name} Detaylarını Excel Olarak İndir",
-                    data=s_det_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'),
-                    file_name=f"{s_name}_Detayli_Rapor.csv",
-                    mime="text/csv",
-                    key=f"dl_btn_{s_name}"
-                )
-                st.divider()
-    else:
-        st.info("Henüz detaylı puan girişi bulunmuyor.")
+
+        with t3:
+            st.subheader("🎤 Sunum Detay Tablosu (Oturum Bazlı)")
+            if not detailed_df.empty:
+                for s_name in SESSIONS.keys():
+                    s_det_df = detailed_df[detailed_df['Session'] == s_name]
+                    if not s_det_df.empty:
+                        st.markdown(f"### 📅 {s_name}")
+                        st.dataframe(s_det_df, use_container_width=True)
+                        st.download_button(
+                            label=f"📥 {s_name} Detaylarını Excel Olarak İndir",
+                            data=s_det_df.to_csv(sep=';', index=False, encoding='utf-8-sig').encode('utf-8-sig'),
+                            file_name=f"{s_name}_Detayli_Rapor.csv",
+                            mime="text/csv",
+                            key=f"dl_btn_{s_name}"
+                        )
+                        st.divider()
+            else:
+                st.info("Henüz detaylı puan girişi bulunmuyor.")
 
         with t4:
             st.subheader("⚙️ Kayıt ve Puan Yönetimi")
             if not detailed_df.empty:
                 st.write("Mevcut jüri oylarını buradan silebilirsiniz:")
-                # Kayıt Silme
                 record_list = [f"{r['Judge']} | {r['Team']} | {r['Session']}" for _, r in detailed_df.iterrows()]
                 to_delete = st.selectbox("Silinecek Kaydı Seçin:", ["Seçiniz..."] + record_list)
                 
                 if to_delete != "Seçiniz...":
                     if st.button("Seçili Puanı Sil"):
                         j_name, t_name, s_name = to_delete.split(" | ")
-                        # Detailed Sil
                         detailed_df = detailed_df[~((detailed_df['Judge'] == j_name) & (detailed_df['Team'] == t_name))]
                         save_csv(detailed_df, DETAILED_FILE)
-                        # Master Güncelle
                         new_avg = detailed_df[detailed_df['Team'] == t_name]['Total_Score'].mean()
                         master_df = load_csv(MASTER_FILE)
                         master_df = master_df[~(master_df['Team'] == t_name)]
@@ -212,4 +201,3 @@ elif page == "Admin Dashboard":
                 if os.path.exists(DETAILED_FILE): os.remove(DETAILED_FILE)
                 st.error("Tüm veritabanı sıfırlandı. Sayfa yenileniyor...")
                 st.rerun()
-
